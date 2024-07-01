@@ -1,5 +1,5 @@
 cabal-version:       2.4
-name:                scrappy
+name:                scrappy-core
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
