@@ -1,0 +1,418 @@
+Literally just had a billion comments in the file so I cut and paste all to here:
+
+
+
+-- | NOTE On TreeElemParser and SimpleElem, would it make sense to abstract out the (inner + end)
+-- | parser? where they operate on same context to cut down on code or does that do anything positive?
+
+--------------------------------------------------------------------------------------------------
+--Note:
+-- -> treeHtmlParser is top level func 
+-- -> where foldHtmlMatcher is meant to handle the innerHtml of a given top-level node
+--   --> foldHtmlMatcher calls recurseHtmlMatcher
+--   --> foldHtmlMatcher receives the result of: many htmlGenParser and gives what should (according
+--       to a desired design) be ::InnerTextHtmlTree 
+--------------------------------------------------------------------------------------------------
+
+-- | Actual flow is like so:
+
+-- | Start at top level, of course
+-- | Match on particular html opening tag
+-- | At top level uses htmlGenParser 
+-- | htmlGenParser effectively scopes in to/"uncurries" to most inner, first node
+-- | At this point it will parse this most inner, first node where it only contains [0..inf] text
+-- |   -> it will therefore have no innerTree
+-- | It will then continue parsing all nodes at this same level
+-- | CASE (theoretical)
+-- |  #1 -> next node is deeper nested
+-- |  #2 -> node is leaf like first one
+
+-- | Either way, the process works and at some point after scoping in and completing whereby       completing, for a given 'top-level' node, all it's inner nodes have been parsed
+-- | At the point of this node being parsed, it is folded through foldHtmlMatcher before we continue parsing
+-- | Once the semi-top-level node has been parsed, we move to the next semi-top-level node which    will be at the same HTML indentation as the previous
+-- | Once the semi-top-level nodes have all been parsed, we fold them through foldHtmlMatcher
+-- | Repeating this process, we eventually have parsed all sub nodes to the top level html node for which we matched the opening tag of
+-- | We know this to be true from matching on the correct closing tag
+-- | Simply, we will always match on the correct closing tag because as soon as a tag is opened at a sub level, it must be matched before the higher level closing tag/ this becomes the parsers next goal
+
+-- | Along the way: we've accumulated:
+-- |  -->Matches, according to a parsing pattern 
+
+---------------------------------------------------------------------------------------------------
+
+
+
+-- | Note: we could keep logic on how deep the match was found
+-- | lets say that we find it inside of some <p> tag, upon folding we could at that point state that nesting of this match was "0" and it would be in same old list of matches
+
+-- | Instead though, matches would be :: [(String, Int)] where every time we fold, we increment that
+-- | value for each match in the list, returning something like
+
+              --- [("dog", 9), ("Dog", 0), ("Dog", 3)..]
+
+-- | This would mean that at our current top-level node, whatever that is, we would have 9-layers of nesting, then 0 then then 3
+
+-- | This may need to be more complex to be a lookup system :: [Int]
+
+-- | For example: [1,5,7,4] means the 4th node `of` the 7th node `of` the 5th node `of` the first node
+
+-- | So: [("dog", [1,2,5,5,5,6,6,7]), ("DOG", []), ("Dog", [1,5,2])]
+-- where the length of the list would give the depth and each index would be the index of a map
+
+-- | So incrementing would be (:) 
+
+-- | the function treeLookup would be of type :: [Int] -> (Elem, Attrs) thereby giving us the
+-- | desired match every time, with little overhead on result / very focused result
+
+-- | Thus it could be abstracted out to find all matches with minimal surrounding html
+
+---As for the use case though...----------------------------------------------------------------------
+
+-- | I suppose we'd be fine with no nesting considerations, at all actually, and it may eliminate the
+-- | need for an enriched datatype of matches in the record. we'd also know exactly when this is even relevant as treeElemParser only even makes sense for more complex cases such as how we'll know when
+-- | we are on the browsing page for the first time and we'd only need to do this once if
+-- | we hold on to the value for following pages instead of recomputing
+
+--However
+
+-- | How to handle failure of repeat parse?
+  --i suppose it would just reach the end of the string using many
+
+-- | But come to think of it, if we fail at a top node where we havent specified what we are looking
+-- | for, that is, we dont know what were looking for
+  -- > Then best thing to do is step in one node and compare nodes
+  -- and when we do so, it will not likely fuck us up when we parse / pass on the remainder after a
+  -- truly repeating element
+
+  -- In order to do this, we should look up the first indexed elem description of the failed parse
+  -- in our Forest ElemHead datatype
+
+  -- so parseOpeningTag (again) >> retry
+
+
+-- | Note: we wouldnt need to skip opening tag if we are applying the next parser in the innerText'
+-- | AND we'd need to apply the top-level-repeat check-function
+
+-- treeFailNextOld :: ParsecT s u m String -> ElemHead -> ParsecT s u m (TreeHTML a)
+-- treeFailNextOld match elemHead =
+--   (parseOpeningTag Nothing [])
+--   >> treeElemParser match (Just $ (fst elemHead):[]) (setAttrs (snd elemHead))
+--   where
+--     setAttrs :: Map String String -> [(String, Maybe String)]
+--     setAttrs map = (fmap . fmap) Just (toList map)
+
+
+-- | We could do like treeFailNext which operates for matches on the first one OR we could divide up
+-- | the page more strategically;
+
+-- | The tree has information on how to grab all elems of the next step in ->
+-- | we could thus apply to this logic to all of those, and only apply said logic to said innerText
+-- | value stored in the record
+
+-- | Will be insignificant at first when on <body> or maybe <div> but over time will focus the search
+-- | very easily as well as be far more reliable and would be far quicker
+
+-- | This is also more logically descriptive of the problem : we want to find a container which has
+-- | repetitive elements
+
+
+-- But note:
+
+-- | this still doesnt tell us how to allow for multiplicity on certain elements
+
+
+
+
+
+
+
+
+-- | Inputs
+--  1)-> ["a", "div"]
+--  2)-> [href = google, class = "net"]
+--  3)-> [matchCase1, matchCase2] 
+
+-- | Outputs
+--  -> (1) * (2) * (3) => y :: [[[Int]]] then to [Options] 
+
+
+-- | Allowed to vary as long as remains a possible product of inputted options eg above
+
+
+
+
+
+-- For each group;
+
+-- in that group, each member will apply the current N then pass the message (Success|Fail)
+-- on Fail (Before 1,2,Maybe 3) aka (1, NOT 2..)-> not likely pagination, try next group
+
+-- Most efficient would be not (integer)
+
+-- what if we chained potentially:   elemParser (any) ( inner = N(i) )  
+
+-- 
+
+
+
+
+
+
+
+-- Could also mine groups then see if any smaller ones
+   --where Predicate = { href=sameUrl except (page-like query parameter || pathvar) is diff(1) each time in order
+                      -- Should be mined on page 1 to limit vars then saved to memory / passed along
+                      -- check path var first then query param
+
+                      -- Note: found case where increment/diff == num list elems 
+
+-- NOTE!!!! : You can accurately tell if its pagination by its inner text
+  -- we know that we can find text with "1" ("2" | find $ string"next") Maybe More 
+  -- if we do this hyper efficiently it would require passing a list of parsers to be applied in sequence inside
+  -- of the outer elements
+
+  -- would need pattern that allows number, N and space in between elem bounds 
+
+  -- some cases upon research, use a different element tag for the selected element which is in most cases
+  -- gonna be representative of page 1's nav elem
+
+
+
+
+
+  
+  -- validateTreeH matchh (foldHtmlMatcher (x <> y))
+  -- where match = case matchh of
+  --                 Nothing -> parserZero -- just skips to parsing rest of html through secondary parsers
+  --                 Just parserr -> parserr   
+
+-- literally just pass subTree to the expression
+-- can use the check match function
+
+-- | do
+-- |  (foldHtmlMatcher (specificForest)) --> InnerTextResult --> TreeHtml
+-- |  
+
+-- | This can be extended to conditionally apply some in cases of allowed multiplicity 
+
+
+
+--inside of treeElemParserSpecific (which will be very similar but not the same as treeElemParser) we will use this subTree in the application of our `specificForest` function
+
+
+
+-- foldHtmlMatcher (specificRepetitiveForest (groupify (_params (x :: TreeHTML) )))
+
+-- | Could start with automatically setting inside (One _)
+-- | Following iteration checks the last cons'd (Many a) value to see if equality
+  --  If equality
+  --  then set to Many constructor
+  --  cons onto acc list with One constructor
+
+-- | This would need to be called at the start of treeElemParser
+
+-- manyTreeElemHeadParser' :: Show a => ParsecT s u m a -> [Many (Tree ElemHead)] -> ParsecT s u m [TreeHTML]
+-- manyTreeElemHeadParser' _ [] = return []
+-- manyTreeElemHeadParser' match (mTree: mTrees) = do
+--   x <- manyTreeElemHeadParser match mTree
+--   xs <- manyTreeElemHeadParser' match mTrees
+--   return x : xs
+
+
+  --note, 
+
+
+
+
+-- | Note: Maybe we need to abstract this to taking anything that returns TreeHtml and not just
+-- | accepting whatever 
+
+-- | Note, in order to fix problem of multiplicity we'd need to instead have :: -> ParsecT s u m [TreeHTML] ->
+-- | where single TreeHTMLs are seen as singleton
+
+-- Just commented out for debugging 
+                                   
+                                   
+                                   
+
+
+-- | NOTE: could have class IsTreeHTML a where ... and add constraint (IsTreeHTML tr) => ParsecT s u m tr
+
+-- htmlGenParser' :: Show a => ParsecT s u m a -> ParsecT s u m (HTMLMatcher a)
+-- htmlGenParser' match =  htmlGenParser match (treeElemParserInside match) (anyChar:[])  
+                                                    
+-- | TODO: Create Instance of Semigroup for InnerTextHTMLTree and TreeHTML
+
+-- | TODO: Need to recursively call htmlGenParser in high level function that does logic on
+-- | multiplicity and switching to new element definition
+
+-- emptyInnerTree :: Show a => InnerTextHTMLTree a
+-- emptyInnerTree = InnerTextHTMLTree { matches = []
+--                                    , innerText = ""
+--                                    , innerTree = [] }
+ 
+-- foldHtmlMatcher :: ShowHTML a => [HTMLMatcher TreeHTML a] -> InnerTextHTMLTree a
+-- foldHtmlMatcher htmlMatchers = func htmlMatchers mempty
+--   where
+--     func :: ShowHTML a => [HTMLMatcher TreeHTML a] -> InnerTextHTMLTree a -> InnerTextHTMLTree a
+--     func [] state = state
+--     func (htmlM:htmlMatchers) ithmt = case htmlM of
+--       IText str -> 
+--         func htmlMatchers (InnerTextHTMLTree (_matches ithmt) (_innerText ithmt <> str) (innerTree ithmt))
+--       -- May need to enforce a Show Instance on 'mat'
+--       Match mat -> 
+--         func htmlMatchers (InnerTextHTMLTree ( (_matches ithmt) <> (mat:[])) (_innerText ithmt <> (showH mat)) (innerTree ithmt))
+--       --concat to fullInnerText
+--       Element htmlTree -> --interEl :: ElemHead [HtmlMatcher]
+--         func htmlMatchers (InnerTextHTMLTree (_matches ithmt <> (matches' htmlTree)) ((_innerText ithmt) <> (showH htmlTree)) ((innerTree ithmt) <> ((makeBranch htmlTree):[])))
+
+
+--   -- Note: should be abstracting out the above for semigroup instance, and when capture element
+--   -- be able to switch to next TreeHTML parser
+
+
+--     --data ElemHead = (Elem/Text, Attrs)
+--     --  Note: Attrs will be changed to being a Map String String
+--     makeBranch :: ShowHTML a => TreeHTML a -> Tree ElemHead
+--     makeBranch treeH = Node (elTag treeH, attrs treeH) (_innerTree' treeH)
+
+
+
+-- foldHtmlMatcherToTrup :: ShowHTML a => [HTMLMatcher TreeHTML a] -> InnerTextHTMLTree a
+-- foldHtmlMatcherToTrup htmlMatchers = func htmlMatchers mempty
+--   where
+--     func :: ShowHTML a => [HTMLMatcher TreeHTML a] -> ( -> InnerTextHTMLTree a
+--     func [] state = state
+--     func (htmlM:htmlMatchers) ithmt = case htmlM of
+--       IText str -> 
+--         func htmlMatchers (InnerTextHTMLTree (matches ithmt) (innerText ithmt <> str) (innerTree ithmt))
+--       -- | May need to enforce a Show Instance on 'mat'
+--       Match mat -> 
+--         func htmlMatchers (InnerTextHTMLTree (mat : matches ithmt) (innerText ithmt <> (show mat)) (innerTree ithmt))
+--       --concat to fullInnerText
+--       Element htmlTree -> --interEl :: ElemHead [HtmlMatcher]
+--         func htmlMatchers (InnerTextHTMLTree (matches ithmt <> (matches' htmlTree)) ((innerText ithmt) <> (showH htmlTree)) ((makeBranch htmlTree) : innerTree ithmt))
+
+
+  -- -- | Note: should be abstracting out the above for semigroup instance, and when capture element
+  -- -- | be able to switch to next TreeHTML parser
+
+
+  --   -- |data ElemHead = (Elem/Text, Attrs)
+  --   -- | Note: Attrs will be changed to being a Map String String
+  --   makeBranch :: ShowHTML a => TreeHTML a -> Tree ElemHead
+  --   makeBranch treeH = Node (elTag treeH, attrs treeH) (_innerTree' treeH)
+
+
+                       
+-- <div>
+--   randomText match randomText 
+--   <p>text</p>
+--   <p>match</p>
+--   <p>text</p>
+-- </div>
+        
+
+
+
+-- findSameInnerTrees :: Tree a -> [Tree a]
+-- findSameInnerTrees = undefined
+
+-- -- | called this cuz meant to be used maybe 
+-- strictTreeDetermineAllSubTrees :: TextH -> [SubTree a]
+-- strictTreeDetermineAllSubTrees = do
+--   x <- elemParser (Just ["body"])
+--   return $ findSameInnerTrees x
+--   undefined 
+-- -- User would want to work from top down method which first accepts the full html OR full body tag
+-- -- then use the parsed Tree ElemHead structure to compare equality of inner Tree ElemHead 's
+
+-- -- | Can build directly off treeElemParser's find many implementation
+-- -- But may not be worth it
+
+
+------------------------------------------------------------------------------------------------------
+-- Tree Elemhead Analysis Functions-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+-- | Note that in general we are trying to abstract (repetition of certain elements) to being a sort
+-- | of equality
+ 
+-- | We A need to see if an element repeats
+  -- we could create group logic if a2 == a1 then (a1,a2,) else new group
+  -- where really we'd use lists or lists using tuples
+
+        -- like so: [(String-A, [String-B])] where String-A is the elemtag in question (eg <li>)
+        -- and String-B is some information on elements with matching tag
+
+        -- Or perhaps String-A is instead some Elemtag <-> AttrsMap combo
+
+        -- If we'd find this tuple of (a, [a]) to be \case: (a, []) then do as elemParser
+        --                                                : (a, [a]) then do as (many elemParser)
+        -- Or some elemParser depending on how we want to do this
+
+-- | With that said, we need a function to take a TreeHtml datatype, read its map and create a parser
+  -- which will check for the proper internal nodes
+
+
+
+
+
+--each top level tree should be handled recursively
+
+-- | first create the specs with the elemhead , then pass the remaining tree to the next recursion
+-- | then will need to also pass to another next recursion, different from the first
+
+-- | [Tree a [Tree a]] ~~ [Tree Elemhead RestOfTree]
+
+-- | we could have a helper function "mkFlexTreeParser" which just does the scoping in recursion
+-- | by calling itself
+
+
+
+-- | NOTE: It will still be some sort of ordering
+
+-- | I could likely also
+
+
+-- Forest a -> ParsecT s u m TreeHTML
+
+--forest 1
+
+-- | But now we need to allow for multiplicity
+-- should accumulate ElemHeads if equal to the last one, then take length of that
+-- and see if length > 1 == True -> many (parser) ; False -> parser
+
+-- | BigF will need to be what allows for multiplicity 
+
+
+-- Wouldnt i also need to skip text?
+
+-- f :: Tree a -> ParsecT s u m TreeHTML 
+-- f (Node elemHead restOf) = treeElemParser (attrs) (tags) match 
+--   -- f ((Node elemHead restOf'):forest) = treeElemParser (attrs) (tag)
+--   where match = g restOf 
+--         g restOf = fmap f restOf
+
+-- I need this because I'm dealing with an original TreeHTML which is effectively an abstracted
+-- elemhead when you think about it (with an inner tree)
+
+-- | Isnt bigF'' by definition/structure just htmlGenParser ?
+
+-- [HtmlMatcher a] --> InnerTextElement --> TreeHtml
+
+-- -- | Mutual recursion 
+-- bigF'' :: [Forest a] -> ParsecT s u m TreeHTML 
+-- bigF'' (tree1:tree2:forest) stateAcc
+--   | tree1 == tree2 = bigF'' forest ([tree1, tree2],) -- adding to the accumulator 
+--   | tree2 /= tree 1 = bigF'' forest ([tree2], if length (stateAcc) > 1
+--                                               then some treeElemParser
+--                                               else treeElemParser)
+
+
+--or we could just work by the first and see if tree1 == tree2 but pass
+--to recursion: bigF (tree2:forest)
+
+
+       
+
+

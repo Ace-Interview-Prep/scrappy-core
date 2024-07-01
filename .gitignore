@@ -1,0 +1,15 @@
+*.fake
+*.o
+*.hi
+*.hie
+*.chi
+*.chs.h
+*.dyn_o
+*.dyn_hi
+*-result
+*.*~
+*~
+*#
+.#*
+dist-newstyle/
+src/QuickProjects.hs
