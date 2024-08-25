@@ -383,7 +383,7 @@ sentenceWhere test = do
     toSentence :: Stream s m Char => ([WrittenWord] -> Bool) -> [WrittenWord] -> ParsecT s u m Sentence
     toSentence test words = case test words of
       False -> parserZero
-      True -> pure  $ Sentence words -- $ Sentence $ intercalate "" (fmap unWord words) <> "."
+      True -> pure  $ Sentence words --  Sentence $ intercalate "" (fmap unWord words) <> "."
     unWord (WW s) = s
 
 sentenceTail :: Stream s m Char => Bool -> ParsecT s u m [WrittenWord]
