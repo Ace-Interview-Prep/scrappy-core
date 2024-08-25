@@ -3,7 +3,7 @@
 , transformers
 }:
 mkDerivation {
-  pname = "scrappy";
+  pname = "scrappy-core";
   version = "0.1.0.4";
   src = ./.;
   libraryHaskellDepends = [
